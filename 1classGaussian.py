@@ -24,12 +24,12 @@ def main():
     mean1=0
     sd1=1
     mean2=5
-    sd2=2
+    sd2=1
     #1d 1class data
-    df=np.random.normal(mean1,sd1,100)*np.random.normal(mean2,sd2,100)
+    df=np.random.normal(mean1,sd1,1000)+np.random.normal(mean2,sd2,1000)
     
     #plot pdf
-    plot_1d('1d_1c_2g_diffMean&Sd',df,mean1,sd1,mean2,sd2)
+    plot_1d('1d_1c_2g_diffMean_05_10k',df,mean1,sd1,mean2,sd2)
 
     #PCA
     pca = PCA(n_components=1)
@@ -37,7 +37,7 @@ def main():
     pca.fit(df)
     new_df=pca.transform(df)
     #plot pdf of transform
-    plot_1d('1d_1c_2g_diffMean&Sd',df,mean1,sd1,mean2,sd2)
+    plot_1d('1d_1c_2g_diffMean_05_10k',df,mean1,sd1,mean2,sd2)
 
 
 if __name__=='__main__':
