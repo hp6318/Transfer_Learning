@@ -80,13 +80,13 @@ def plot(df_c0,df_c1,name):
 if __name__=='__main__':
     n=1000
     # source domain: GMM - class 1
-    src_mus_c1 = [np.array([-8, -2]), np.array([8, 4])]
-    src_covs_c1 = [np.array([[0.5, 0], [0, 0.5]]), np.array([[1, 0], [0, 1]])]
+    src_mus_c1 = [np.array([-6, 2]), np.array([-6, -2])]
+    src_covs_c1 = [np.array([[1, 0.8], [0.8, 1]]), np.array([[1, -0.8], [-0.8, 1]])]
     src_c1 = gaussian_mixture_model(src_mus_c1,src_covs_c1,n)
     
     # source domain: GMM - class 0
-    src_mus_c0 = [np.array([-4, 2]), np.array([4,-2])]
-    src_covs_c0 = [np.array([[0.25, 0], [0, 0.25]]), np.array([[0.5, 0], [0, 0.5]])]
+    src_mus_c0 = [np.array([6, 2]), np.array([6,-2])]
+    src_covs_c0 = [np.array([[1, 0.8], [0.8, 1]]), np.array([[1, -0.8], [-0.8, 1]])]
     src_c0 = gaussian_mixture_model(src_mus_c0,src_covs_c0,n)
 
     # plot
@@ -116,8 +116,8 @@ if __name__=='__main__':
     plt.legend()
     idx=datetime.now()
     dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name='src_target_'+dt_string
-    # plt.savefig(f_name+'.png')
+    f_name=dt_string+'_src_target_samp'
+    plt.savefig(f_name+'.png')
     plt.show()
 
     #combined dataset - source
@@ -126,17 +126,21 @@ if __name__=='__main__':
     df_target = np.concatenate((target_c0,target_c1),axis=0)
 
     #scaled
-    #Standardized
-    scaler_src = preprocessing.StandardScaler().fit(df_src)
-    df_src_scaled = scaler_src.transform(df_src)
+    #no scaling
+    df_src_scaled = df_src
+    df_target_scaled = df_target
 
-    scaler_target = preprocessing.StandardScaler().fit(df_target)
-    df_target_scaled = scaler_target.transform(df_target)
+    # #Standardized
+    # scaler_src = preprocessing.StandardScaler().fit(df_src)
+    # df_src_scaled = scaler_src.transform(df_src)
+
+    # scaler_target = preprocessing.StandardScaler().fit(df_target)
+    # df_target_scaled = scaler_target.transform(df_target)
 
     # #Normalized
-    # df_src_scaled = preprocessing.normalize(df_src)
+    # df_src_scaled = preprocessing.normalize(df_src,axis=0)
 
-    # df_target_scaled = preprocessing.normalize(df_target)
+    # df_target_scaled = preprocessing.normalize(df_target,axis=0)
 
 
     #PCA - source domain 
@@ -150,7 +154,7 @@ if __name__=='__main__':
     # plot
     # plot(df_target_pca[:n],df_target_pca[n:],'pca_Target')
 
-    #combined plot - after scaling and pca
+    #combined plot - after scaling
     #combined plot of source domain and target domain
     fig = plt.figure()
     plt.scatter(df_src_scaled[:n, 0], df_src_scaled[:n, 1],color='r',label='src_class_0',marker='o')
@@ -162,9 +166,9 @@ if __name__=='__main__':
     plt.xlabel('x1')
     plt.legend()
     idx=datetime.now()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name='src_target_scaled_pca_'+dt_string
-    # plt.savefig(f_name+'.png')
+    # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name=dt_string+'_src_target_scaled'
+    plt.savefig(f_name+'.png')
     plt.show()
 
 
@@ -180,34 +184,34 @@ if __name__=='__main__':
     plt.xlabel('x1')
     plt.legend()
     idx=datetime.now()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name='src_target_scaled_pca_'+dt_string
-    # plt.savefig(f_name+'.png')
+    # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name=dt_string+'_src_target_scaled_pca'
+    plt.savefig(f_name+'.png')
     plt.show()
 
 
 
 
     
-    # #align the source space with the target space
-    # # df_src_aligned = df_src_scaled@(X_s@X_s.T@X_t)
-    # df_src_aligned = df_src_scaled@(X_s.T@X_t@X_s)
-    # df_target_projected = df_target_scaled@X_t
+    #align the source space with the target space
+    # df_src_aligned = df_src_scaled@(X_s@X_s.T@X_t)
+    df_src_aligned = df_src_scaled@(X_s.T@X_t@X_s)
+    df_target_projected = df_target_scaled@X_t
 
-    # #combined plot - after sub-space alignment
-    # #combined plot of source domain and target domain
-    # fig = plt.figure()
-    # plt.scatter(df_src_aligned[:n, 0], df_src_aligned[:n, 1],color='r',label='src_class_0',marker='o')
-    # plt.scatter(df_src_aligned[n:, 0], df_src_aligned[n:, 1],color='r',label='src_class_1',marker='x')
-    # plt.scatter(df_target_projected[:n, 0], df_target_projected[:n, 1],color='g',label='target_class_0',marker='o')
-    # plt.scatter(df_target_projected[n:, 0], df_target_projected[n:, 1],color='g',label='target_class_1',marker='x')
-    # plt.title('Gaussian Mixture Model Samples: Source|Target - Aligned')
-    # plt.ylabel('x2')
-    # plt.xlabel('x1')
-    # plt.legend()
-    # idx=datetime.now()
+    #combined plot - after sub-space alignment
+    #combined plot of source domain and target domain
+    fig = plt.figure()
+    plt.scatter(df_src_aligned[:n, 0], df_src_aligned[:n, 1],color='r',label='src_class_0',marker='o')
+    plt.scatter(df_src_aligned[n:, 0], df_src_aligned[n:, 1],color='r',label='src_class_1',marker='x')
+    plt.scatter(df_target_projected[:n, 0], df_target_projected[:n, 1],color='g',label='target_class_0',marker='o')
+    plt.scatter(df_target_projected[n:, 0], df_target_projected[n:, 1],color='g',label='target_class_1',marker='x')
+    plt.title('Gaussian Mixture Model Samples: Source|Target - Aligned')
+    plt.ylabel('x2')
+    plt.xlabel('x1')
+    plt.legend()
+    idx=datetime.now()
     # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    # f_name='src_target_aligned_'+dt_string
-    # plt.savefig(f_name+'.png')
-    # plt.show()
+    f_name=dt_string+'_src_target_aligned'
+    plt.savefig(f_name+'.png')
+    plt.show()
 
