@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from datetime import datetime
 from sklearn.decomposition import PCA
+from sklearn import preprocessing
 
 def inv_sigmoid(value):
     return np.log(value/(1-value))
@@ -79,17 +80,17 @@ def plot(df_c0,df_c1,name):
 if __name__=='__main__':
     n=1000
     # source domain: GMM - class 1
-    src_mus_c1 = [np.array([-2, 2]), np.array([-2, -2])]
-    src_covs_c1 = [np.array([[1, 0.8], [0.8, 1]]), np.array([[1, -0.8], [-0.8, 1]])]
+    src_mus_c1 = [np.array([-8, -2]), np.array([8, 4])]
+    src_covs_c1 = [np.array([[0.5, 0], [0, 0.5]]), np.array([[1, 0], [0, 1]])]
     src_c1 = gaussian_mixture_model(src_mus_c1,src_covs_c1,n)
     
     # source domain: GMM - class 0
-    src_mus_c0 = [np.array([-2, 8]), np.array([6,-2])]
-    src_covs_c0 = [np.array([[1, 0.2], [0.2, 1]]), np.array([[1, -0.3], [-0.3, 1]])]
+    src_mus_c0 = [np.array([-4, 2]), np.array([4,-2])]
+    src_covs_c0 = [np.array([[0.25, 0], [0, 0.25]]), np.array([[0.5, 0], [0, 0.5]])]
     src_c0 = gaussian_mixture_model(src_mus_c0,src_covs_c0,n)
 
     # plot
-    plot(src_c0,src_c1,'Source')
+    # plot(src_c0,src_c1,'Source')
 
     rotation=60 #degrees +ve: counter clockwise
 
@@ -101,7 +102,7 @@ if __name__=='__main__':
     target_c0 = gaussian_mixture_model(src_mus_c0,src_covs_c0,n)
     target_c0 = rot_2d(rotation,target_c0)
     # plot
-    plot(target_c0,target_c1,'Target')
+    # plot(target_c0,target_c1,'Target')
 
     #combined plot of source domain and target domain
     fig = plt.figure()
@@ -124,33 +125,89 @@ if __name__=='__main__':
     #combined dataset - target
     df_target = np.concatenate((target_c0,target_c1),axis=0)
 
+    #scaled
+    #Standardized
+    scaler_src = preprocessing.StandardScaler().fit(df_src)
+    df_src_scaled = scaler_src.transform(df_src)
+
+    scaler_target = preprocessing.StandardScaler().fit(df_target)
+    df_target_scaled = scaler_target.transform(df_target)
+
+    # #Normalized
+    # df_src_scaled = preprocessing.normalize(df_src)
+
+    # df_target_scaled = preprocessing.normalize(df_target)
+
+
     #PCA - source domain 
-    df_src_pca,X_s = pca(df_src)
+    df_src_pca,X_s = pca(df_src_scaled) #X_s: Dxd (column vector) 
     # plot
-    plot(df_src_pca[:n],df_src_pca[n:],'pca_Source')
+    # plot(df_src_pca[:n],df_src_pca[n:],'pca_Source')
 
 
     #PCA - target domain 
-    df_target_pca,X_t = pca(df_target)
+    df_target_pca,X_t = pca(df_target_scaled)
     # plot
-    plot(df_target_pca[:n],df_target_pca[n:],'pca_Target')
+    # plot(df_target_pca[:n],df_target_pca[n:],'pca_Target')
 
-    #combined plot - after pca
+    #combined plot - after scaling and pca
+    #combined plot of source domain and target domain
+    fig = plt.figure()
+    plt.scatter(df_src_scaled[:n, 0], df_src_scaled[:n, 1],color='r',label='src_class_0',marker='o')
+    plt.scatter(df_src_scaled[n:, 0], df_src_scaled[n:, 1],color='r',label='src_class_1',marker='x')
+    plt.scatter(df_target_scaled[:n, 0], df_target_scaled[:n, 1],color='g',label='target_class_0',marker='o')
+    plt.scatter(df_target_scaled[n:, 0], df_target_scaled[n:, 1],color='g',label='target_class_1',marker='x')
+    plt.title('Gaussian Mixture Model Samples: Source|Target - Scaled')
+    plt.ylabel('x2')
+    plt.xlabel('x1')
+    plt.legend()
+    idx=datetime.now()
+    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name='src_target_scaled_pca_'+dt_string
+    # plt.savefig(f_name+'.png')
+    plt.show()
+
+
+    #combined plot - after scaling and pca
     #combined plot of source domain and target domain
     fig = plt.figure()
     plt.scatter(df_src_pca[:n, 0], df_src_pca[:n, 1],color='r',label='src_class_0',marker='o')
     plt.scatter(df_src_pca[n:, 0], df_src_pca[n:, 1],color='r',label='src_class_1',marker='x')
     plt.scatter(df_target_pca[:n, 0], df_target_pca[:n, 1],color='g',label='target_class_0',marker='o')
     plt.scatter(df_target_pca[n:, 0], df_target_pca[n:, 1],color='g',label='target_class_1',marker='x')
-    plt.title('Gaussian Mixture Model Samples: Source|Target - PCA')
+    plt.title('Gaussian Mixture Model Samples: Source|Target - Scaled_PCA')
     plt.ylabel('x2')
     plt.xlabel('x1')
     plt.legend()
     idx=datetime.now()
     dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name='src_target_pca_'+dt_string
+    f_name='src_target_scaled_pca_'+dt_string
     # plt.savefig(f_name+'.png')
     plt.show()
 
+
+
+
     
-    
+    # #align the source space with the target space
+    # # df_src_aligned = df_src_scaled@(X_s@X_s.T@X_t)
+    # df_src_aligned = df_src_scaled@(X_s.T@X_t@X_s)
+    # df_target_projected = df_target_scaled@X_t
+
+    # #combined plot - after sub-space alignment
+    # #combined plot of source domain and target domain
+    # fig = plt.figure()
+    # plt.scatter(df_src_aligned[:n, 0], df_src_aligned[:n, 1],color='r',label='src_class_0',marker='o')
+    # plt.scatter(df_src_aligned[n:, 0], df_src_aligned[n:, 1],color='r',label='src_class_1',marker='x')
+    # plt.scatter(df_target_projected[:n, 0], df_target_projected[:n, 1],color='g',label='target_class_0',marker='o')
+    # plt.scatter(df_target_projected[n:, 0], df_target_projected[n:, 1],color='g',label='target_class_1',marker='x')
+    # plt.title('Gaussian Mixture Model Samples: Source|Target - Aligned')
+    # plt.ylabel('x2')
+    # plt.xlabel('x1')
+    # plt.legend()
+    # idx=datetime.now()
+    # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    # f_name='src_target_aligned_'+dt_string
+    # plt.savefig(f_name+'.png')
+    # plt.show()
+
