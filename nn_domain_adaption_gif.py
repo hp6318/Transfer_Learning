@@ -82,8 +82,11 @@ def inv_sigmoid(value):
 def gaussian_mixture_model(mus,covs,n):
     # mus = [np.array([-2, 2]), np.array([2, -2])]
     # covs = [np.array([[1, 0.8], [0.8, 1]]), np.array([[1, -0.8], [-0.8, 1]])]
-
-    pis = np.array([0.34, 0.33,0.33])
+    pis = []
+    if len(mus)==2:
+        pis = np.array([0.5,0.5])
+    else:
+        pis = np.array([0.34, 0.33,0.33])
     acc_pis = [np.sum(pis[:i]) for i in range(1, len(pis) + 1)]
     assert np.isclose(acc_pis[-1], 1)
 
@@ -145,8 +148,8 @@ if __name__=='__main__':
     idx=datetime.now()
     dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
     
-    generate_data=False
-    save_flag=False
+    generate_data=True
+    save_flag=True
 
     homography_mat=np.ones((2,2))
     rotation_flag=False
@@ -172,8 +175,8 @@ if __name__=='__main__':
         src_c0 = gaussian_mixture_model(src_mus_c0,src_covs_c0,n)
 
         # source domain: GMM - class 1
-        src_mus_c1 = [np.array([10, 0]), np.array([10, 5]),np.array([7,-4])]
-        src_covs_c1 = [np.array([[1, 0.8], [0.8, 1]]), np.array([[1, 0], [0, 1]]),np.array([[0.8, 0.1], [0.1, 1.5]])]
+        src_mus_c1 = [np.array([10, 0]), np.array([-15, 5])]
+        src_covs_c1 = [np.array([[0.8, 0.8], [0.8, 0.2]]), np.array([[1, -0.8], [-0.8, 1.5]])]
         src_c1 = gaussian_mixture_model(src_mus_c1,src_covs_c1,n)
         
         # target domain: GMM - class 1 (rotated source class 1)
@@ -189,8 +192,8 @@ if __name__=='__main__':
         # combined dataset - target
         target_data = np.concatenate((target_c0,target_c1),axis=0)
     else:
-        src_data=np.load('Src_scale.npy')
-        target_data=np.load('Target_scale.npy')
+        src_data=np.load('Src_rot60.npy')
+        target_data=np.load('Target_rot60.npy')
     
     plot(src_data,target_data,'Sampled Data',idx)
     
@@ -306,7 +309,7 @@ if __name__=='__main__':
                 print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}")
             
             # Use layer 1 weights : X_pca_src@layer1_weights
-            src_pca_aligned=X_pca_src@model.fc1.weight.cpu().detach().numpy()
+            src_pca_aligned=X_pca_src@model.fc3.weight.cpu().detach().numpy()
             src_aligned_list.append(src_pca_aligned)
             loss_list.append(loss.item())
 
@@ -330,7 +333,7 @@ if __name__=='__main__':
             print(f"Final Loss: {loss.item()}")
 
         # Use layer 1 weights : X_pca_src@layer1_weights
-        src_pca_aligned=X_pca_src@model.fc1.weight.cpu().detach().numpy()
+        src_pca_aligned=X_pca_src@model.fc3.weight.cpu().detach().numpy()
 
         # check Forbenius norm
         # cov of src_aligned : Cov_src_pca_aligned
@@ -354,9 +357,9 @@ if __name__=='__main__':
     # Use the best model to obtain the aligned source data
     best_model.eval()
     with torch.no_grad():
-        src_pca_aligned = X_pca_src @ best_model.fc1.weight.cpu().detach().numpy()
+        src_pca_aligned = X_pca_src @ best_model.fc3.weight.cpu().detach().numpy()
 
-    print("Best model layer 2 weights \n",best_model.fc1.weight.cpu().detach().numpy())
+    print("Best model layer 3 weights \n",best_model.fc3.weight.cpu().detach().numpy())
     print("Transformation matrix \n",homography_mat)
 
     plt.clf()
