@@ -21,6 +21,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from matplotlib.animation import FuncAnimation
 from math import log10, floor
+import copy
 
 # Define the neural network model
 class NeuralNetwork(nn.Module):
@@ -288,7 +289,7 @@ if __name__=='__main__':
 
         # Define the loss function and optimizer
         criterion = nn.MSELoss()
-        optimizer = optim.Adam(model.parameters(), lr=10,weight_decay=decay_rate)
+        optimizer = optim.Adam(model.parameters(), lr=0.01,weight_decay=decay_rate)
 
         fig = plt.figure()
         scatters = []
@@ -333,8 +334,8 @@ if __name__=='__main__':
         decay_dict[str(find_exp(decay_rate))]['mse_array']=loss_list
         decay_dict[str(find_exp(decay_rate))]['forb_array']=forb_norm_list
 
-        ani = FuncAnimation(fig, animate, frames=num_epochs, fargs=(src_aligned_list, X_pca_target, scatters,str(find_exp(decay_rate))), interval=500)
-        ani.save(dt_string+'animation_'+str(find_exp(decay_rate))+'.gif', writer='pillow')
+        # ani = FuncAnimation(fig, animate, frames=num_epochs, fargs=(src_aligned_list, X_pca_target, scatters,str(find_exp(decay_rate))), interval=500)
+        # ani.save(dt_string+'animation_'+str(find_exp(decay_rate))+'.gif', writer='pillow')
 
         # Evaluate the trained model
         model.eval()
@@ -365,62 +366,58 @@ if __name__=='__main__':
     # Print the best decay rate , loss and Forbenius norm
     print(f"Best Decay Rate: {best_decay_rate}, Best Loss: {best_loss}, Best Forbenius norm: {best_F_norm}")
 
-    # Use the best model to obtain the aligned source data
-    best_model.eval()
-    with torch.no_grad():
-        src_pca_aligned = X_pca_src @ best_model.fc3.weight.cpu().detach().numpy()
-
     print("Best model layer 3 weights \n",best_model.fc3.weight.cpu().detach().numpy())
     print("Transformation matrix \n",homography_mat)
 
-    plt.clf()
-    plt.scatter([-5,-4,-3,-2,-1],loss_array,color='r',label='MSE loss')
-    plt.scatter([-5,-4,-3,-2,-1],F_norm_array,color='b',label='Forbenius norm')
-    plt.title("Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('Decay rates')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'loss curve'
-    plt.savefig(f_name+'.png')
+    # Use the best model to obtain the aligned source data
+    delta=np.arange(-1,1,0.02)
+    # temp_w = np.zeros((2,2))
+    best_model.eval()
+    forb_norm_arr_delta = []
+    best_model_l3_w = np.ones((2,2))
+    
+    with torch.no_grad():
+        best_model_l3_w  = best_model.fc3.weight.cpu().detach().numpy()
+    
+    for dim in range(4):
+        forb_norm_delta_temp=[]
+        for delta_change in delta:
+            temp_w = copy.deepcopy(best_model_l3_w)
+            # print("best model weight \n",temp_w)
+            if dim==0:
+                temp_w[0][0]+=delta_change
+            elif dim==1:
+                temp_w[0][1]+=delta_change
+            elif dim==2:
+                temp_w[1][0]+=delta_change
+            else:
+                temp_w[1][1]+=delta_change
+            # print("Delta change {} | Dim {}".format(delta_change,dim))
+            # print('New Layer 3 weight \n',temp_w)
+            src_pca_aligned_delta = X_pca_src @ temp_w
+            Cov_src_pca_aligned_delta = np.cov(src_pca_aligned_delta.T)
+            forb_norm = np.sum(np.square(Cov_src_pca_aligned_delta-Cov_target_pca))
+            forb_norm_delta_temp.append(forb_norm)
+            # print("curr forb norm : ",forb_norm)
+        forb_norm_arr_delta.append(forb_norm_delta_temp)
+
+    for i in range(4):
+        plt.clf()
+        plt.scatter(delta,forb_norm_arr_delta[i],color='b',label='Forbenius norm')
+        plt.title("Loss Curve vs Delta Change | Dim: {}".format(i)) 
+        plt.ylabel('Loss')
+        plt.xlabel('Delta change')
+        plt.legend()
+        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        f_name=dt_string+'loss curve delta_'+str(i)
+        plt.savefig(f_name+'.png')
     # plt.show()
 
-    #plot mse & Forb_norm vs epoch for all decay rate 
-    colours=['r','g','b','c','m']
-    j=0
-    plt.clf()
-    for decay in decay_dict:       
-        plt.plot(np.arange(num_epochs),decay_dict[decay]['mse_array'],color=colours[j],linestyle='solid',label='MSE:'+decay)
-        plt.plot(np.arange(num_epochs),decay_dict[decay]['forb_array'],color=colours[j],linestyle='dotted',label='Forb_norm:'+decay)
-        j+=1
-    plt.title("Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('epochs')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'loss_all'
-    plt.savefig(f_name+'.png')
-    # plt.show()
-
-    #plot for last 30-35 epochs
-    j=0
-    plt.clf()
-    for decay in decay_dict:       
-        plt.plot(np.arange(35),decay_dict[decay]['mse_array'][-35:],color=colours[j],linestyle='solid',label='MSE:'+decay)
-        plt.plot(np.arange(35),decay_dict[decay]['forb_array'][-35:],color=colours[j],linestyle='dotted',label='Forb_norm:'+decay)
-        j+=1
-    plt.title("Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('epochs')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'loss_all_lastEpochs'
-    plt.savefig(f_name+'.png')
-
+    
 
 
     plot(src_pca_aligned,X_pca_target,'aligned',idx)
 
     plot(src_pca_aligned,X_pca_src,'aligned Vs Before',idx)
 
-    plot(src_pca_aligned,src_pca_aligned,'Only aligned',idx)
+    # plot(src_pca_aligned,src_pca_aligned,'Only aligned',idx)

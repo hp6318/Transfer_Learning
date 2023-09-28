@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 from sklearn.decomposition import PCA
 from math import log10, floor
+import plotly.graph_objects as go
 
 def plot(src,target,title,idx):
     #combined plot
@@ -98,12 +99,12 @@ if __name__=='__main__':
     idx=datetime.now()
     dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
     
-    generate_data=False
-    save_flag=False
+    generate_data=True
+    save_flag=True
 
     homography_mat=np.ones((2,2))
-    rotation_flag=True
-    scale_flag=False
+    rotation_flag=False
+    scale_flag=True
     if rotation_flag:
         deg=60
         rad_rot=np.deg2rad(deg)
@@ -169,58 +170,143 @@ if __name__=='__main__':
     # cov of X_pca_target : Cov_target_pca
     Cov_target_pca=np.cov(X_pca_target.T)
 
-    rot_angles=[i for i in range(0,185,5)]
+    rot_angles=[i for i in range(0,365,5)]
+
     f_norm_arr=[]
     mse_arr=[]
 
-    src_rot = affine_transformation(rot_mat(60),src_data)
+    if rotation_flag:
+        src_rot = affine_transformation(rot_mat(60),src_data)
+        
+        for x_deg in rot_angles:
+            rotation_mat=rot_mat(x_deg)
+            src_aligned_xDeg = affine_transformation(rotation_mat,X_pca_src)
+            # check Forbenius norm
+            # cov of src_aligned : Cov_src_pca_aligned
+            Cov_src_pca_aligned_xDeg = np.cov(src_aligned_xDeg.T)
+            forb_norm = np.sum(np.square(Cov_src_pca_aligned_xDeg-Cov_target_pca))
+            f_norm_arr.append(forb_norm)
+            if not pca_space_flag:
+                mse_error=mse(src_rot,src_aligned_xDeg)
+                mse_arr.append(mse_error)
 
-    for x_deg in rot_angles:
-        rotation_mat=rot_mat(x_deg)
-        src_aligned_xDeg = affine_transformation(rotation_mat,X_pca_src)
-        # check Forbenius norm
-        # cov of src_aligned : Cov_src_pca_aligned
-        Cov_src_pca_aligned_xDeg = np.cov(src_aligned_xDeg.T)
-        forb_norm = np.sum(np.square(Cov_src_pca_aligned_xDeg-Cov_target_pca))
-        f_norm_arr.append(forb_norm)
-        if not pca_space_flag:
-            mse_error=mse(src_rot,src_aligned_xDeg)
-            mse_arr.append(mse_error)
+        # plot
+        plt.clf()
+        plt.scatter(rot_angles,mse_arr,color='r',label='MSE loss')
+        plt.scatter(rot_angles,f_norm_arr,color='b',label='Forbenius norm')
+        plt.title("Loss curve")
+        plt.ylabel('Loss')
+        plt.xlabel('Rotation angles')
+        plt.legend()
+        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        f_name=dt_string+'loss curve'
+        plt.savefig(f_name+'.png')
 
-    # plot
-    plt.clf()
-    plt.scatter(rot_angles,mse_arr,color='r',label='MSE loss')
-    plt.scatter(rot_angles,f_norm_arr,color='b',label='Forbenius norm')
-    plt.title("Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('Rotation angles')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'loss curve'
-    plt.savefig(f_name+'.png')
+        # plot
+        plt.clf()
+        plt.scatter(rot_angles,mse_arr,color='r',label='MSE loss')
+        plt.title("MSE Loss curve")
+        plt.ylabel('Loss')
+        plt.xlabel('Rotation angles')
+        plt.legend()
+        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        f_name=dt_string+'mse loss curve'
+        plt.savefig(f_name+'.png')
 
-    # plot
-    plt.clf()
-    plt.scatter(rot_angles,mse_arr,color='r',label='MSE loss')
-    plt.title("MSE Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('Rotation angles')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'mse loss curve'
-    plt.savefig(f_name+'.png')
-
-    # plot
-    plt.clf()
-    plt.scatter(rot_angles,f_norm_arr,color='b',label='Forbenius norm')
-    plt.title("Forbenius Loss curve")
-    plt.ylabel('Loss')
-    plt.xlabel('Rotation angles')
-    plt.legend()
-    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-    f_name=dt_string+'fnorm loss curve'
-    plt.savefig(f_name+'.png')
+        # plot
+        plt.clf()
+        plt.scatter(rot_angles,f_norm_arr,color='b',label='Forbenius norm')
+        plt.title("Forbenius Loss curve")
+        plt.ylabel('Loss')
+        plt.xlabel('Rotation angles')
+        plt.legend()
+        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        f_name=dt_string+'fnorm loss curve'
+        plt.savefig(f_name+'.png')
     
+    scale_x_val=np.arange(0,3.5,0.5)
+    scale_y_val=np.arange(0,3.5,0.5)
+    
+    scale_xy = [] #[[scale_x1,scale_y1]]
+    for i in range(len(scale_x_val)):
+        for j in range(len(scale_y_val)):
+            scale_xy.append([scale_x_val[i],scale_y_val[j]])
+    scale_xy = np.array(scale_xy)
+    if scale_flag:
+        src_scale = affine_transformation(np.array([[scale_x,0],[0,scale_y]]),src_data)
+        for sc_val in scale_xy:
+            scale_mat=np.array([[sc_val[0],0],[0,sc_val[1]]])
+            src_aligned_xScale = affine_transformation(scale_mat,X_pca_src)
+            # check Forbenius norm
+            # cov of src_aligned : Cov_src_pca_aligned
+            Cov_src_pca_aligned_xScale = np.cov(src_aligned_xScale.T)
+            forb_norm = np.sum(np.square(Cov_src_pca_aligned_xScale-Cov_target_pca))
+            f_norm_arr.append(forb_norm)
+            if not pca_space_flag:
+                mse_error=mse(src_scale,src_aligned_xScale)
+                mse_arr.append(mse_error)
+
+        # plot //changes
+        # plt.clf()
+        # fig = go.Figure(data=[go.Scatter3d(x=scale_xy[:,0], y=scale_xy[:,1], z=mse_arr,
+        #                            mode='markers')])
+        # fig = go.Figure(data=[go.Scatter3d(x=scale_xy[:,0], y=scale_xy[:,1], z=f_norm_arr,
+        #                            mode='markers')])    
+        # fig.show()
+        # plt.clf()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(projection='3d')
+        # ax.scatter(scale_xy[:,0], scale_xy[:,1], mse_arr, c=mse_arr, cmap='Greens',label='MSE Loss')
+        # ax.scatter(scale_xy[:,0], scale_xy[:,1], f_norm_arr,c=f_norm_arr, cmap='Reds', label='Forbenius norm')
+        # ax.set_xlabel('x_scale')
+        # ax.set_ylabel('y_scale')
+        # ax.set_zlabel('Loss')
+        
+        # plt.title("Loss curve")
+        # plt.legend()
+        # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        # f_name=dt_string+'loss curve'
+        # plt.savefig(f_name+'.png')
+        
+
+        # plot
+        plt.clf()
+        fig = go.Figure(data=[go.Scatter3d(x=scale_xy[:,0], y=scale_xy[:,1], z=mse_arr,
+                                   mode='markers')])    
+        fig.show()
+        # plt.clf()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(projection='3d')
+        # ax.scatter(scale_xy[:,0], scale_xy[:,1], mse_arr, c=mse_arr,cmap='Greens',label='MSE Loss')
+        # ax.set_xlabel('x_scale')
+        # ax.set_ylabel('y_scale')
+        # ax.set_zlabel('Loss')
+        
+        # plt.title("MSE loss curve")
+        # plt.legend()
+        # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        # f_name=dt_string+'mse loss curve'
+        # plt.savefig(f_name+'.png')
+
+
+        # plot
+        plt.clf()
+        fig = go.Figure(data=[go.Scatter3d(x=scale_xy[:,0], y=scale_xy[:,1], z=f_norm_arr,
+                                   mode='markers')])    
+        fig.show()
+        # plt.clf()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(projection='3d')
+        # ax.scatter(scale_xy[:,0], scale_xy[:,1], f_norm_arr, c=f_norm_arr,cmap='Reds',label='Forbenius norm')
+        # ax.set_xlabel('x_scale')
+        # ax.set_ylabel('y_scale')
+        # ax.set_zlabel('Loss')
+        
+        # plt.title("Forbenius Loss curve")
+        # plt.legend()
+        # dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+        # f_name=dt_string+'forb loss curve'
+        # plt.savefig(f_name+'.png')
 
     
 
