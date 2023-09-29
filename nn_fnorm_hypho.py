@@ -99,8 +99,8 @@ if __name__=='__main__':
     idx=datetime.now()
     dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
     
-    generate_data=True
-    save_flag=True
+    generate_data=False
+    save_flag=False
 
     homography_mat=np.ones((2,2))
     rotation_flag=False
@@ -143,8 +143,8 @@ if __name__=='__main__':
         # combined dataset - target
         target_data = np.concatenate((target_c0,target_c1),axis=0)
     else:
-        src_data=np.load('Src_rot60.npy')
-        target_data=np.load('Target_rot60.npy')
+        src_data=np.load('Src_scale.npy')
+        target_data=np.load('Target_scale.npy')
     
     plot(src_data,target_data,'Sampled Data',idx)
     
