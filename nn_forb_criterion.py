@@ -21,7 +21,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from matplotlib.animation import FuncAnimation
 from math import log10, floor
-import copy
 
 # Define the neural network model
 class NeuralNetwork(nn.Module):
@@ -148,13 +147,44 @@ def animate(epoch, src, target, scatters,decay_rate):
 
     scatters.append(sc)
 
+def animate2(epoch, src, target, scatters2,decay_rate):
+    plt.clf()
+    n=1000
+    sc=plt.rcParams["figure.figsize"] = (10,10)
+    sc=plt.scatter(src[epoch][:, 0], src[epoch][:, 1],color='cyan',label='v_n_aligned')
+    sc=plt.scatter(target[:, 0], target[:, 1],color='g',label='Target_v_n')
+    sc=plt.title('aligned v_n vs target v_n | decay:'+decay_rate + ' | epoch:'+str(epoch))
+    sc=plt.ylabel('x2')
+    sc=plt.xlabel('x1')
+    sc=plt.legend()
+
+    scatters2.append(sc)
+
+
 def find_exp(number) -> int:
     base10 = log10(abs(number))
     return abs(floor(base10))
+
 def mse(data,proj_points):
     error = ((data - proj_points)**2).mean(axis=None)
     return error
 
+
+def covariance_matrix(tensor):
+    # Ensure the tensor is 2D
+    if tensor.dim() != 2:
+        raise ValueError("Input tensor must be 2D")
+
+    # Compute the mean along the 0th dimension (rows)
+    mean = torch.mean(tensor, dim=0)
+
+    # Subtract the mean from the tensor
+    centered_tensor = tensor - mean
+
+    # Compute the covariance matrix
+    covariance = torch.mm(centered_tensor.t(), centered_tensor) / (tensor.size(0) - 1)
+
+    return covariance
 
 if __name__=='__main__':
     idx=datetime.now()
@@ -262,10 +292,12 @@ if __name__=='__main__':
     plot(X_pca_src_newData,X_pca_src_newData,"new sampling",idx)
     # input v_n : X_pca_src
     input_data=torch.from_numpy(X_pca_src_newData).float()
+    X_pca_src_torch=torch.from_numpy(X_pca_src).float()
 
     # output y_n : X_pca_src@Cov_target_pca
     output_data2=X_pca_src_newData@Cov_target_pca
     output_data=torch.from_numpy(output_data2).float()
+    Cov_target_pca_torch=torch.from_numpy(Cov_target_pca).float()
 
     # Initialize the model
     d=2
@@ -293,12 +325,18 @@ if __name__=='__main__':
 
         # Define the loss function and optimizer
         criterion = nn.MSELoss()
+        criterion2 = nn.MSELoss()
+        
         optimizer = optim.Adam(model.parameters(), lr=0.01,weight_decay=decay_rate)
 
-        fig = plt.figure()
+        # fig = plt.figure()
+        # fig2 =plt.figure()
         scatters = []
         src_aligned_list = []
         src_aligned_list.append(X_pca_src)
+        scatters2 = []
+        v_n_list = []
+        v_n_list.append(X_pca_src_newData)
         loss_list=[] #to store loss of all epochs per decay rate
         forb_norm_list=[] #to store Forb norm loss of all epochs per decay rate
         
@@ -311,9 +349,12 @@ if __name__=='__main__':
             # print("Epoch : ",epoch)
             # Forward pass
             output = model(input_data)
+            src_pca_aligned_torch=torch.matmul(X_pca_src_torch,model.fc3.weight)
+            output_cov=covariance_matrix(src_pca_aligned_torch)
 
             # Compute the loss
-            loss = criterion(output_data, output)
+            loss = criterion(Cov_target_pca_torch, output_cov)
+            mse_loss=criterion2(output_data,output)
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -327,7 +368,8 @@ if __name__=='__main__':
             # Use layer 1 weights : X_pca_src@layer1_weights
             src_pca_aligned=X_pca_src@model.fc3.weight.cpu().detach().numpy()
             src_aligned_list.append(src_pca_aligned)
-            loss_list.append(loss.item())
+            loss_list.append(mse_loss.item())
+            v_n_list.append(output.cpu().detach().numpy())
 
             # cov of src_aligned : Cov_src_pca_aligned
             Cov_src_pca_aligned = np.cov(src_pca_aligned.T)
@@ -338,15 +380,30 @@ if __name__=='__main__':
         decay_dict[str(find_exp(decay_rate))]['mse_array']=loss_list
         decay_dict[str(find_exp(decay_rate))]['forb_array']=forb_norm_list
 
-        # ani = FuncAnimation(fig, animate, frames=num_epochs, fargs=(src_aligned_list, X_pca_target, scatters,str(find_exp(decay_rate))), interval=500)
-        # ani.save(dt_string+'animation_'+str(find_exp(decay_rate))+'.gif', writer='pillow')
+        for i in range(2):
+            if i ==0:
+                plt.clf()
+                fig = plt.figure()
+                ani = FuncAnimation(fig, animate, frames=num_epochs, fargs=(src_aligned_list, X_pca_target, scatters,str(find_exp(decay_rate))), interval=500,blit=False)
+                ani.save(dt_string+'animation_'+str(find_exp(decay_rate))+'.gif', writer='pillow')
+            else:
+                plt.clf()
+                fig2 =plt.figure()        
+                ani2 = FuncAnimation(fig2, animate2, frames=num_epochs, fargs=(v_n_list, output_data2, scatters2,str(find_exp(decay_rate))), interval=500,blit=False)
+                ani2.save(dt_string+'animation2_'+str(find_exp(decay_rate))+'.gif', writer='pillow')
 
         # Evaluate the trained model
         model.eval()
         with torch.no_grad():
             output = model(input_data)
-            loss = criterion(output_data, output)
-            print(f"Final Loss: {loss.item()}")
+            src_pca_aligned_torch=torch.matmul(X_pca_src_torch,model.fc3.weight)
+            output_cov=covariance_matrix(src_pca_aligned_torch)
+
+            loss = criterion(Cov_target_pca_torch, output_cov)
+            mse_loss = criterion2(output_data, output)
+            print(f"Final forb Loss: {loss.item()}")
+            print(f"Final mse Loss: {mse_loss.item()}")
+            
 
         # Use layer 1 weights : X_pca_src@layer1_weights
         src_pca_aligned=X_pca_src@model.fc3.weight.cpu().detach().numpy()
@@ -354,6 +411,7 @@ if __name__=='__main__':
         # check Forbenius norm
         # cov of src_aligned : Cov_src_pca_aligned
         Cov_src_pca_aligned = np.cov(src_pca_aligned.T)
+        
         forb_norm = np.sum(np.square(Cov_src_pca_aligned-Cov_target_pca))/4
         print("Forb_norm: ", forb_norm)
 
@@ -370,138 +428,62 @@ if __name__=='__main__':
     # Print the best decay rate , loss and Forbenius norm
     print(f"Best Decay Rate: {best_decay_rate}, Best Loss: {best_loss}, Best Forbenius norm: {best_F_norm}")
 
-    print("Best model layer 3 weights \n",best_model.fc3.weight.cpu().detach().numpy())
-    print("Transformation matrix \n",homography_mat)
     # Use the best model to obtain the aligned source data
     best_model.eval()
     with torch.no_grad():
         src_pca_aligned = X_pca_src @ best_model.fc3.weight.cpu().detach().numpy()
     
     print("Cov | SRC aligned \n",np.cov(src_pca_aligned.T))
-    # Use the best model to obtain the aligned source data
-    delta=np.arange(-1,1,0.02)
-    # temp_w = np.zeros((2,2))
-    best_model.eval()
-    forb_norm_arr_delta = []
-    mse_arr_delta=[]
-    best_model_l3_w = np.ones((2,2))
-    
-    with torch.no_grad():
-        best_model_l3_w  = best_model.fc3.weight.cpu().detach().numpy()
-    
-    best_delta_forb = dict() #dim - best_delta 
-    best_delta_mse = dict()
+    print("Cov | Target \n",Cov_target_pca)
+    print("Best model layer 3 weights \n",best_model.fc3.weight.cpu().detach().numpy())
+    print("Transformation matrix \n",homography_mat)
 
-    for dim in range(4):
-        forb_norm_delta_temp=[]
-        mse_delta_temp=[]
-        # print("Dimension :{} ".format(dim))
-        for delta_change in delta:
-            temp_w = copy.deepcopy(best_model_l3_w)
-            # print("best model weight \n",temp_w)
-            if dim==0:
-                temp_w[0][0]+=delta_change
-            elif dim==1:
-                temp_w[0][1]+=delta_change
-            elif dim==2:
-                temp_w[1][0]+=delta_change
-            else:
-                temp_w[1][1]+=delta_change
-            # print("Delta change {} ".format(delta_change))
-            src_pca_aligned_delta = X_pca_src @ temp_w
-            Cov_src_pca_aligned_delta = np.cov(src_pca_aligned_delta.T)
-            # print(Cov_src_pca_aligned_delta )
-            # forb norm calculation
-            forb_norm = np.sum(np.square(Cov_src_pca_aligned_delta-Cov_target_pca))/4
-            forb_norm_delta_temp.append(forb_norm)
-            # mse loss calculation
-            v_n_aligned=X_pca_src_newData@temp_w.T@Cov_src_pca@temp_w
-            mse_loss = mse(output_data2,v_n_aligned)
-            mse_delta_temp.append(mse_loss)
-        best_delta_forb[dim]=[delta[np.argmin(forb_norm_delta_temp)],min(forb_norm_delta_temp)]
-        best_delta_mse[dim]=[delta[np.argmin(mse_delta_temp)],min(mse_delta_temp)]
-        forb_norm_arr_delta.append(forb_norm_delta_temp)
-        mse_arr_delta.append(mse_delta_temp)
-    
-    for i in range(4):
-        plt.clf()
-        plt.scatter(delta,forb_norm_arr_delta[i],color='b',label='Forbenius norm')
-        plt.title("Loss Curve vs Delta Change | Dim: {}".format(i)) 
-        plt.ylabel('Loss')
-        plt.xlabel('Delta change')
-        plt.legend()
-        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-        f_name=dt_string+'forb loss curve delta_'+str(i)
-        plt.savefig(f_name+'.png')
+    plt.clf()
+    plt.scatter([-5,-4,-3,-2,-1],loss_array,color='r',label='MSE loss')
+    plt.scatter([-5,-4,-3,-2,-1],F_norm_array,color='b',label='Forbenius norm')
+    plt.title("Loss curve")
+    plt.ylabel('Loss')
+    plt.xlabel('Decay rates')
+    plt.legend()
+    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name=dt_string+'loss curve'
+    plt.savefig(f_name+'.png')
     # plt.show()
-    for i in range(4):
-        plt.clf()
-        plt.scatter(delta,mse_arr_delta[i],color='orange',label='MSE LOSS')
-        plt.title("Loss Curve vs Delta Change | Dim: {}".format(i)) 
-        plt.ylabel('Loss')
-        plt.xlabel('Delta change')
-        plt.legend()
-        dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
-        f_name=dt_string+'mse loss curve delta_'+str(i)
-        plt.savefig(f_name+'.png')
-    
-    # greedy approach - forb
-    temp_w = copy.deepcopy(best_model_l3_w)
-    print(" Greedy approach - Based on Forb norm \n")
-    src_aligned_greedy_arr_forb = []
-    for dim in range(4):
-        print("Delta change: {} | dim: {}".format(best_delta_forb[dim][0],dim))
-        if dim==0:
-            temp_w[0][0]+=best_delta_forb[dim][0]
-        elif dim==1:
-            temp_w[0][1]+=best_delta_forb[dim][0]
-        elif dim==2:
-            temp_w[1][0]+=best_delta_forb[dim][0]
-        else:
-            temp_w[1][1]+=best_delta_forb[dim][0]
-        src_aligned_greedy=X_pca_src @ temp_w
-        src_aligned_greedy_arr_forb.append(src_aligned_greedy)
-        # mse loss calculation
-        v_n_aligned=X_pca_src_newData@temp_w.T@Cov_src_pca@temp_w
-        mse_loss = mse(output_data2,v_n_aligned)
-        print("Cov | src aligned | dim: {} : \n {} ".format(dim,np.cov(src_aligned_greedy.T)))
-        print("Layer 3 weights | dim: {} : \n {}".format(dim,temp_w))
-        print("Forb norm loss: {}".format(np.sum(np.square(np.cov(src_aligned_greedy.T)-Cov_target_pca))/4))
-        # print("MSE: {} ".format(mse_loss))
 
-    for i in range(4):
-        plot(src_aligned_greedy_arr_forb[i],X_pca_target,'aligned_greedy_forb_'+str(i),idx)
-    
-    # greedy approach - mse
-    temp_w = copy.deepcopy(best_model_l3_w)
-    print(" Greedy approach - Based on mse norm \n")
-    src_aligned_greedy_arr_mse = []
-    for dim in range(4):
-        print("Delta change: {} | dim: {}".format(best_delta_mse[dim][0],dim))
-        if dim==0:
-            temp_w[0][0]+=best_delta_mse[dim][0]
-        elif dim==1:
-            temp_w[0][1]+=best_delta_mse[dim][0]
-        elif dim==2:
-            temp_w[1][0]+=best_delta_mse[dim][0]
-        else:
-            temp_w[1][1]+=best_delta_mse[dim][0]
-        src_aligned_greedy=X_pca_src @ temp_w
-        src_aligned_greedy_arr_mse.append(src_aligned_greedy)
-        # mse loss calculation
-        v_n_aligned=X_pca_src_newData@temp_w.T@Cov_src_pca@temp_w
-        mse_loss = mse(output_data2,v_n_aligned)
-        print("Cov | src aligned | dim: {} : \n {} ".format(dim,np.cov(src_aligned_greedy.T)))
-        print("Layer 3 weights | dim: {} : \n {}".format(dim,temp_w))
-        print("Forb norm loss: {}".format(np.sum(np.square(np.cov(src_aligned_greedy.T)-Cov_target_pca))/4))
-        # print("MSE: {} ".format(mse_loss))
+    #plot mse & Forb_norm vs epoch for all decay rate 
+    colours=['r','g','b','c','m']
+    j=0
+    plt.clf()
+    for decay in decay_dict:       
+        plt.plot(np.arange(num_epochs),decay_dict[decay]['mse_array'],color=colours[j],linestyle='solid',label='MSE:'+decay)
+        plt.plot(np.arange(num_epochs),decay_dict[decay]['forb_array'],color=colours[j],linestyle='dotted',label='Forb_norm:'+decay)
+        j+=1
+    plt.title("Loss curve")
+    plt.ylabel('Loss')
+    plt.xlabel('epochs')
+    plt.legend()
+    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name=dt_string+'loss_all'
+    plt.savefig(f_name+'.png')
+    # plt.show()
 
-    
-    for i in range(4):
-        plot(src_aligned_greedy_arr_mse[i],X_pca_target,'aligned_greedy_mse_'+str(i),idx)
+    #plot for last 30-35 epochs
+    j=0
+    plt.clf()
+    for decay in decay_dict:       
+        plt.plot(np.arange(35),decay_dict[decay]['mse_array'][-35:],color=colours[j],linestyle='solid',label='MSE:'+decay)
+        plt.plot(np.arange(35),decay_dict[decay]['forb_array'][-35:],color=colours[j],linestyle='dotted',label='Forb_norm:'+decay)
+        j+=1
+    plt.title("Loss curve")
+    plt.ylabel('Loss')
+    plt.xlabel('epochs')
+    plt.legend()
+    dt_string = idx.strftime('%d_%m_%Y_%H_%M_%S')
+    f_name=dt_string+'loss_all_lastEpochs'
+    plt.savefig(f_name+'.png')
+
+
 
     plot(src_pca_aligned,X_pca_target,'aligned',idx)
 
     plot(src_pca_aligned,X_pca_src,'aligned Vs Before',idx)
-
-    # plot(src_pca_aligned,src_pca_aligned,'Only aligned',idx)
